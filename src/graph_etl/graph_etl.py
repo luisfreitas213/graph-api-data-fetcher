@@ -1,5 +1,6 @@
+import json
 import os
-from config.config import OUTPUT_PATH, PAGE_METRICS_ENDPOINTS
+from config.config import OUTPUT_PATH, PAGE_ENDPOINT_BASE, PAGE_METRICS, PAGE_METRICS_ENDPOINT_BASE, POST_ENDPOINT_BASE, POST_METRICS
 from extract.api_client import GraphAPIClient
 from utils.utils import get_last_months_intervals
 
@@ -24,30 +25,98 @@ def etl():
     if not page_id:
         raise EnvironmentError("PAGE_ID environment variable is not set.")
 
+    #Get Instagram Business Account
+    params = {
+    "fields": "instagram_business_account",
+    }
+    output_dir = os.path.join(OUTPUT_PATH, "instagram_business_account")
+    os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
+
+    file_name = "instagram_business_account.json"
+    client.fetch_data(
+        params=params,
+        output_dir=output_dir,
+        endpoint=PAGE_ENDPOINT_BASE,
+        file_name=file_name,
+        extend_data = False
+    )
+
+    file_path = os.path.join(output_dir, file_name)
+    # Read the file and loop through each post
+    with open(file_path, "r", encoding="utf-8") as file:
+        ig_account  = json.load(file)["data"]["instagram_business_account"]["id"]
+
     # Iterate over metrics and date intervals to fetch data
-    for page_metric in PAGE_METRICS_ENDPOINTS:
-        for interval in intervals_date:
+    for interval in intervals_date:
+        # PAGE METRICS
+        # Construct request parameters
+        params = {
+            'metric': PAGE_METRICS,
+            'since': str(interval["since"]),
+            'until': str(interval["until"]),
+            'period': 'day'  # Daily aggregation
+        }
 
-            # Construct request parameters
-            params = {
-                'metric': page_metric,
-                'since': str(interval["since"]),
-                'until': str(interval["until"]),
-                'period': 'day'  # Daily aggregation
-            }
+        # Define output directory and file name
+        output_dir = os.path.join(OUTPUT_PATH, "facebook_page_metrics")
+        os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
 
-            # Define output directory and file name
-            output_dir = os.path.join(OUTPUT_PATH, page_metric)
-            os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
+        file_name = f"{interval['start_date']}_{interval['until']}.json"
 
-            file_name = f"{interval['start_date']}_{interval['until']}.json"
-
-            # Fetch and save data
-            client.fetch_data(
-                params=params,
-                output_dir=output_dir,
-                endpoint=f"/{page_id}/insights",
-                file_name=file_name
+        # Fetch and save data
+        client.fetch_data(
+            params=params,
+            output_dir=output_dir,
+            endpoint=PAGE_METRICS_ENDPOINT_BASE,
+            file_name=file_name
             )
+        # POSTS
+        # Construct request parameters
+        params = {
+            "fields": "id,message,created_time,attachments{media_type,media,url}",
+            'since': str(interval["since"]),
+            'until': str(interval["until"])
+        }
+
+        # Define output directory and file name
+        output_dir = os.path.join(OUTPUT_PATH, "facebook_posts")
+        os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
+
+        file_name = f"{interval['start_date']}_{interval['until']}.json"
+
+        # Fetch and save data
+        client.fetch_data(
+            params=params,
+            output_dir=output_dir,
+            endpoint=POST_ENDPOINT_BASE,
+            file_name=file_name
+        )
+        #POST METRICS
+        file_path = os.path.join(output_dir, file_name)
+        # Read the file and loop through each post
+        with open(file_path, "r", encoding="utf-8") as file:
+            posts_data = json.load(file)
+            for post in posts_data["data"]:
+                post_id = str(post["id"])
+                # Construct request parameters
+                params = {
+                    "metric": POST_METRICS,
+                    'since': str(interval["since"]),
+                    'until': str(interval["until"])
+                }
+
+                # Define output directory and file name
+                output_dir = os.path.join(OUTPUT_PATH, "facebook_post_metrics")
+                os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
+
+                file_name = f"{post_id}.json"
+                # Fetch and save data
+                client.fetch_data(
+                    params=params,
+                    output_dir=output_dir,
+                    endpoint= f"{post_id}/insights",
+                    file_name=file_name
+                )
+
 
     print("ETL process completed successfully.")

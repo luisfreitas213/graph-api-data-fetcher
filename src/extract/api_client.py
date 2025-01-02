@@ -7,15 +7,15 @@ from config.config import URL_BASE
 class GraphAPIClient:
     """
     A client for interacting with the Graph API, providing functionality to fetch data
-    and save it to a specified location.
+    and save it to a specified location, including support for pagination.
     """
 
     def __init__(self):
         pass
 
-    def fetch_data(self, endpoint, params, output_dir, file_name):
+    def fetch_data(self, endpoint, params, output_dir, file_name, extend_data = True):
         """
-        Fetch data from the Graph API for a given endpoint and parameters.
+        Fetch data from the Graph API for a given endpoint and parameters, handling pagination.
 
         Args:
             endpoint (str): API endpoint to query.
@@ -33,14 +33,29 @@ class GraphAPIClient:
         if not params["access_token"]:
             raise EnvironmentError("PAGE_ACCESS_TOKEN environment variable is not set.")
 
-        response = requests.get(url, params=params, timeout=200)
+        all_data = []  # To store paginated results
 
-        if response.status_code == 200:
-            data = response.json()
-            self.__write_to_file(output_dir, file_name, data)
-        else:
-            raise requests.exceptions.RequestException(
-                f"Error fetching data: {response.status_code}, {response.text}")
+        while url:
+            response = requests.get(url, params=params, timeout=200)
+            if response.status_code == 200:
+                data = response.json()
+                if extend_data:
+                    all_data.extend(data.get("data", []))  # Append current page data
+                    # Check for the next page in pagination
+                    paging = data.get("paging", {})
+                    url = paging.get("next", None)  # Get the next page URL
+                    params = {}  # Reset params for subsequent requests
+                else:
+                    all_data = data
+                    url = None
+
+            else:
+                raise requests.exceptions.RequestException(
+                    f"Error fetching data: {response.status_code}, {response.text}")
+
+        # Save all the fetched data to the file
+        self.__write_to_file(output_dir, file_name, {"data": all_data})
+
 
     def __write_to_file(self, output_dir, file_name, data):
         """

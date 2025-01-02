@@ -14,7 +14,7 @@ def get_last_months_intervals(num_months: int):
     today = datetime.today()
     intervals = []
 
-    for i in range(1, int(num_months) + 1):
+    for i in range(0, int(num_months) + 1):
         end_date = today.replace(day=1) - relativedelta(months=i - 1)
         start_date_request = end_date - relativedelta(months=1) - relativedelta(days=1)
         start_date = end_date - relativedelta(months=1)
