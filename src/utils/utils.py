@@ -26,3 +26,40 @@ def get_last_months_intervals(num_months: int):
         })
 
     return intervals
+
+def get_monthly_15_day_intervals(num_months: int):
+    """
+    Generate 15-day intervals for the last `num_months`, 
+    aligned to days 1-15 and 16-last day of the month.
+    Includes custom logic for the current month.
+
+    Args:
+        num_months (int): Number of months to calculate intervals for.
+
+    Returns:
+        list: List of 15-day intervals.
+    """
+    today = datetime.today()
+    intervals = []
+
+    for i in range(0, int(num_months) + 1):
+        end_date = today.replace(day=1) - relativedelta(months=i - 1)
+        start_date_request_first = end_date - relativedelta(months=1) - relativedelta(days=1)
+        start_date_request_second = (end_date - relativedelta(months=1)).replace(day=15)
+        start_date_first = end_date - relativedelta(months=1)
+
+        intervals.append( {
+            "since": start_date_request_second.strftime("%Y-%m-%d"),
+            "until": (end_date - timedelta(days=1)).strftime("%Y-%m-%d"),
+            "start_date": start_date_request_second.strftime("%Y-%m-%d")
+        })
+
+        intervals.append( {
+            "since": start_date_request_first.strftime("%Y-%m-%d"),
+            "until": (start_date_request_second).strftime("%Y-%m-%d"),
+            "start_date": start_date_first.strftime("%Y-%m-%d")
+        })
+
+
+
+    return intervals
