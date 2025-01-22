@@ -1,6 +1,6 @@
 import json
 import os
-from config.config import OUTPUT_PATH, PAGE_ENDPOINT_BASE, PAGE_METRICS, PAGE_METRICS_ENDPOINT_BASE, POST_ENDPOINT_BASE, POST_METRICS
+from config.config import INSTA_PAGE_METRICS, INSTA_POST_METRICS, INSTA_REEL_METRICS, OUTPUT_PATH, PAGE_ENDPOINT_BASE, PAGE_METRICS, PAGE_METRICS_ENDPOINT_BASE, POST_ENDPOINT_BASE, POST_METRICS
 from extract.api_client import GraphAPIClient
 from utils.utils import get_last_months_intervals,get_monthly_15_day_intervals
 
@@ -117,6 +117,55 @@ def etl():
     with open(file_path, "r", encoding="utf-8") as file:
         ig_account  = json.load(file)["data"]["instagram_business_account"]["id"]
 
+    #Get Instagram Media
+    params = {
+    "fields": "id,caption,media_type,media_url,timestamp,permalink"
+    }
+    file_name = "instagram_media.json"
+    output_dir = os.path.join(OUTPUT_PATH, "instagram_media")
+    os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
+
+    client.fetch_data(
+        params=params,
+        output_dir=output_dir,
+        endpoint=f"{ig_account}/media",
+        file_name=file_name
+    )
+
+    file_path = os.path.join(output_dir, file_name)
+    # Step 1: Read Media IDs from File
+    with open(file_path, "r", encoding="utf-8") as file:
+        media_ids = json.load(file)
+
+    # Step 2: Fetch Metrics for Each Media ID
+    for media_item in media_ids["data"]:
+        media_id = media_item["id"]
+        media_type = media_item["media_type"]
+        file_name = f"{media_id}.json"
+        if media_type == "VIDEO":
+            output_dir = os.path.join(OUTPUT_PATH, "insta_reels_metrics")
+            params = {
+                "metric": INSTA_REEL_METRICS
+            }
+            client.fetch_data(
+                params=params,
+                output_dir=output_dir,
+                endpoint=f"{media_id}/insights",
+                file_name=file_name
+            )
+        else:
+            output_dir = os.path.join(OUTPUT_PATH, "insta_posts_metrics")
+            params = {
+                "metric": INSTA_POST_METRICS
+            }
+            client.fetch_data(
+                params=params,
+                output_dir=output_dir,
+                endpoint=f"{media_id}/insights",
+                file_name=file_name
+            )
+
+
     # Get date intervals for data extraction
     try:
         num_months = int(os.getenv("NUM_MONTHS_DATA", "1"))  # Default to 1 month if not set
@@ -125,11 +174,13 @@ def etl():
     except ValueError as e:
         raise ValueError("NUM_MONTHS_DATA must be an integer.") from e
 
+
     # Iterate over metrics and date intervals to fetch data
     for interval in intervals_date:
         # Instagram profile Metrics
         params = {
-            "metric": "impressions,reach",
+            "metric": INSTA_PAGE_METRICS,
+            "metric_type": "total_value",
             'since': str(interval["since"]),
             'until': str(interval["until"]),
             "period": "day"

@@ -1,7 +1,7 @@
 import os
 
 #URL
-URL_BASE: str = "https://graph.facebook.com/v21.0/"
+URL_BASE: str = "https://graph.facebook.com/v22.0/"
 #PAGE METRICS ENDPOITNS
 PAGE_ENDPOINT_BASE: str = f"{os.getenv("PAGE_ID")}"
 PAGE_METRICS_ENDPOINT_BASE: str = f"{PAGE_ENDPOINT_BASE}/insights"
@@ -11,3 +11,8 @@ POST_ENDPOINT_BASE: str = f"{os.getenv("PAGE_ID")}/feed"
 POST_METRICS: str = "post_reactions_like_total, post_reactions_love_total, post_reactions_wow_total, post_reactions_haha_total, post_reactions_sorry_total, post_reactions_anger_total, post_clicks, post_clicks_by_type, post_impressions, post_impressions_unique, post_impressions_paid, post_impressions_paid_unique, post_impressions_fan, post_impressions_fan_unique, post_impressions_organic, post_impressions_organic_unique, post_impressions_viral, post_impressions_viral_unique, post_impressions_nonviral, post_impressions_nonviral_unique"
 #PATHS
 OUTPUT_PATH: str = f"/datalake/raw/graph/{os.getenv("PAGE_NAME")}"
+#INSTAGRAM
+INSTA_PAGE_METRICS: str = "reach, accounts_engaged, likes, comments, shares, saves, replies, follows_and_unfollows, profile_links_taps"
+INSTA_POST_METRICS: str = "comments, follows, likes, profile_activity, profile_visits, reach, saved, shares, total_interactions, views"
+INSTA_REEL_METRICS: str = "comments, likes, reach, saved, shares, total_interactions, views, ig_reels_avg_watch_time, ig_reels_video_view_total_time"
+#engaged_audience_demographics, reached_audience_demographics, follower_demographics,
