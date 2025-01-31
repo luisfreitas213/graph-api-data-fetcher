@@ -1,6 +1,6 @@
 import json
 import os
-from config.config import INSTA_PAGE_METRICS, INSTA_POST_METRICS, INSTA_REEL_METRICS, OUTPUT_PATH, PAGE_ENDPOINT_BASE, PAGE_METRICS, PAGE_METRICS_ENDPOINT_BASE, POST_ENDPOINT_BASE, POST_METRICS
+from config.config import ADS_ACCOUNT, INSTA_PAGE_METRICS, INSTA_POST_METRICS, INSTA_REEL_METRICS, OUTPUT_PATH, PAGE_ENDPOINT_BASE, PAGE_METRICS, PAGE_METRICS_ENDPOINT_BASE, POST_ENDPOINT_BASE, POST_METRICS
 from extract.api_client import GraphAPIClient
 from utils.utils import get_last_30_days_intervals, get_last_months_intervals,get_monthly_15_day_intervals
 
@@ -28,6 +28,24 @@ def etl():
 
     # Iterate over metrics and date intervals to fetch data
     for interval in intervals_date:
+        #ADS SPEND
+        params = {
+        "fields": "spend",
+        "time_range": json.dumps({"since": str(interval["since"]), "until": str(interval["until"])})
+        }
+        # Define output directory and file name
+        output_dir = os.path.join(OUTPUT_PATH, "ads_spend")
+        os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
+
+        file_name = f"{interval['start_date']}_{interval['until']}.json"
+        # Fetch and save data
+        client.fetch_data(
+            params=params,
+            output_dir=output_dir,
+            endpoint=f"/act_{ADS_ACCOUNT}/insights",
+            file_name=file_name
+            )
+
         # PAGE METRICS
         # Construct request parameters
         params = {
