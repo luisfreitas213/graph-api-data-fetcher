@@ -1,6 +1,29 @@
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
+
+def get_last_30_days_intervals():
+    """
+    Generate a list of dictionaries with the intervals for the last 30 days, excluding today.
+
+    Returns:
+        list: List of dictionaries containing 'since' and 'until' dates.
+    """
+    today = datetime.today()
+    intervals = []
+
+    for i in range(1, 1):  # Start from yesterday (1) to 30 days ago
+        since_date = today - timedelta(days=i+1)
+        until_date = today - timedelta(days=i)
+
+        intervals.append({
+            "since": since_date.strftime("%Y-%m-%d"),
+            "until": until_date.strftime("%Y-%m-%d")
+        })
+
+    return intervals
+
+
 def get_last_months_intervals(num_months: int):
     """
     Generate a dictionary with the intervals for the last `num_months`.

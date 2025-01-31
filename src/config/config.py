@@ -12,7 +12,10 @@ POST_METRICS: str = "post_reactions_like_total, post_reactions_love_total, post_
 #PATHS
 OUTPUT_PATH: str = f"/datalake/raw/graph/{os.getenv("PAGE_NAME")}"
 #INSTAGRAM
-INSTA_PAGE_METRICS: str = "reach, accounts_engaged, likes, comments, shares, saves, replies, follows_and_unfollows, profile_links_taps"
+INSTA_PAGE_METRICS: str = "reach,accounts_engaged,likes,comments,shares,saves,replies,follows_and_unfollows,profile_links_taps,follower_count"
 INSTA_POST_METRICS: str = "comments, follows, likes, profile_activity, profile_visits, reach, saved, shares, total_interactions, views"
 INSTA_REEL_METRICS: str = "comments, likes, reach, saved, shares, total_interactions, views, ig_reels_avg_watch_time, ig_reels_video_view_total_time"
 #engaged_audience_demographics, reached_audience_demographics, follower_demographics,
+
+#ADS ACCOUNT
+ADS_ACCOUNT: str = f"{os.getenv("ADS_ACCOUNT")}"

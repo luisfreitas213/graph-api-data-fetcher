@@ -2,7 +2,7 @@ import json
 import os
 from config.config import INSTA_PAGE_METRICS, INSTA_POST_METRICS, INSTA_REEL_METRICS, OUTPUT_PATH, PAGE_ENDPOINT_BASE, PAGE_METRICS, PAGE_METRICS_ENDPOINT_BASE, POST_ENDPOINT_BASE, POST_METRICS
 from extract.api_client import GraphAPIClient
-from utils.utils import get_last_months_intervals,get_monthly_15_day_intervals
+from utils.utils import get_last_30_days_intervals, get_last_months_intervals,get_monthly_15_day_intervals
 
 def etl():
     """
@@ -165,39 +165,57 @@ def etl():
                 file_name=file_name
             )
 
+    #ADS ACCOUNT
 
-    # Get date intervals for data extraction
-    try:
-        num_months = int(os.getenv("NUM_MONTHS_DATA", "1"))  # Default to 1 month if not set
-        intervals_date = get_monthly_15_day_intervals(
-            num_months=num_months)
-    except ValueError as e:
-        raise ValueError("NUM_MONTHS_DATA must be an integer.") from e
-
-
+    """
+    intervals_date = get_last_30_days_intervals()
     # Iterate over metrics and date intervals to fetch data
     for interval in intervals_date:
-        # Instagram profile Metrics
-        params = {
-            "metric": INSTA_PAGE_METRICS,
-            "metric_type": "total_value",
-            'since': str(interval["since"]),
-            'until': str(interval["until"]),
-            "period": "day"
-        }
+        for metric in INSTA_PAGE_METRICS.split(','):
+            try:
+                # Instagram profile Metrics
+                params = {
+                    "metric": metric,
+                    'since': str(interval["since"]),
+                    'until': str(interval["until"]),
+                    "period": "day"
+                }
 
-        # Define output directory and file name
-        output_dir = os.path.join(OUTPUT_PATH, "instagram_page_metrics")
-        os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
+                # Define output directory and file name
+                output_dir = os.path.join(OUTPUT_PATH, f"insta_page_{metric}")
+                os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
 
-        file_name = f"{interval['start_date']}_{interval['until']}.json"
+                file_name = f"{interval['since']}_{interval['until']}.json"
 
-        # Fetch and save data
-        client.fetch_data(
-            params=params,
-            output_dir=output_dir,
-            endpoint=f"{ig_account}/insights",
-            file_name=file_name
-            )
+                # Fetch and save data
+                client.fetch_data(
+                    params=params,
+                    output_dir=output_dir,
+                    endpoint=f"{ig_account}/insights",
+                    file_name=file_name
+                    )
+            except Exception:
+                # Instagram profile Metrics
+                params = {
+                    "metric": metric,
+                    "metric_type":"total_value",
+                    'since': str(interval["since"]),
+                    'until': str(interval["until"]),
+                    "period": "day"
+                }
 
+                # Define output directory and file name
+                output_dir = os.path.join(OUTPUT_PATH, f"insta_page_{metric}")
+                os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
+
+                file_name = f"{interval['since']}_{interval['until']}.json"
+
+                # Fetch and save data
+                client.fetch_data(
+                    params=params,
+                    output_dir=output_dir,
+                    endpoint=f"{ig_account}/insights",
+                    file_name=file_name
+                    )
+    """
     print("ETL process completed successfully.")
