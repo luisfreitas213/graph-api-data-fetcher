@@ -19,4 +19,3 @@ INSTA_REEL_METRICS: str = "comments, likes, reach, saved, shares, total_interact
 
 #ADS ACCOUNT
 ADS_ACCOUNT: str = f"{os.getenv("ADS_ACCOUNT")}"
-

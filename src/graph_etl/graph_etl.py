@@ -2,7 +2,7 @@ import json
 import os
 from config.config import ADS_ACCOUNT, INSTA_PAGE_METRICS, INSTA_POST_METRICS, INSTA_REEL_METRICS, OUTPUT_PATH, PAGE_ENDPOINT_BASE, PAGE_METRICS, PAGE_METRICS_ENDPOINT_BASE, POST_ENDPOINT_BASE, POST_METRICS
 from extract.api_client import GraphAPIClient
-from utils.utils import get_last_30_days_intervals, get_last_months_intervals,get_monthly_15_day_intervals
+from utils.utils import  get_last_months_intervals
 
 def etl():
     """
@@ -28,23 +28,7 @@ def etl():
 
     # Iterate over metrics and date intervals to fetch data
     for interval in intervals_date:
-        #ADS SPEND
-        params = {
-        "fields": "spend",
-        "time_range": json.dumps({"since": str(interval["since"]), "until": str(interval["until"])})
-        }
-        # Define output directory and file name
-        output_dir = os.path.join(OUTPUT_PATH, "ads_spend")
-        os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
 
-        file_name = f"{interval['start_date']}_{interval['until']}.json"
-        # Fetch and save data
-        client.fetch_data(
-            params=params,
-            output_dir=output_dir,
-            endpoint=f"/act_{ADS_ACCOUNT}/insights",
-            file_name=file_name
-            )
 
         # PAGE METRICS
         # Construct request parameters
@@ -183,57 +167,169 @@ def etl():
                 file_name=file_name
             )
 
-    #ADS ACCOUNT
+    ### **4. FETCH ADS & METRICS**
+    # **Step 1: Fetch Campaigns**
+    params = {
+        "fields": "id,name,objective,status",
+        "limit": 100
+    }
 
-    """
-    intervals_date = get_last_30_days_intervals()
-    # Iterate over metrics and date intervals to fetch data
+    campaigns_output_dir = os.path.join(OUTPUT_PATH, "campaigns")
+    os.makedirs(campaigns_output_dir, exist_ok=True)
+
+    file_name = "campaigns_list.json"
+    client.fetch_data(
+        params=params,
+        output_dir=campaigns_output_dir,
+        endpoint=f"act_{ADS_ACCOUNT}/campaigns",
+        file_name=file_name,
+        page=False
+    )
+
+    # **Step 2: Fetch Ad Sets**
+    params = {
+        "fields": "id,name,campaign_id,targeting,budget,status",
+        "limit": 100
+    }
+
+    adsets_output_dir = os.path.join(OUTPUT_PATH, "adsets")
+    os.makedirs(adsets_output_dir, exist_ok=True)
+
+    file_name = "adsets_list.json"
+    client.fetch_data(
+        params=params,
+        output_dir=adsets_output_dir,
+        endpoint=f"act_{ADS_ACCOUNT}/adsets",
+        file_name=file_name,
+        page=False
+    )
+
+    # **Step 3: Fetch Ads with Campaign & Ad Set**
+    params = {
+        "fields": "id,name,creative{id},campaign_id,adset_id,status",
+        "limit": 100
+    }
+
+    ads_output_dir = os.path.join(OUTPUT_PATH, "ads")
+    os.makedirs(ads_output_dir, exist_ok=True)
+
+    file_name = "ads_list.json"
+    client.fetch_data(
+        params=params,
+        output_dir=ads_output_dir,
+        endpoint=f"act_{ADS_ACCOUNT}/ads",
+        file_name=file_name,
+        page=False
+    )
+
+    # **Step 4: Fetch Insights for Campaigns & Ad Sets**
+    # Fetch insights per month
     for interval in intervals_date:
-        for metric in INSTA_PAGE_METRICS.split(','):
-            try:
-                # Instagram profile Metrics
+
+        # **Step 4.1: Fetch Campaign Insights**
+        file_path = os.path.join(campaigns_output_dir, "campaigns_list.json")
+        with open(file_path, "r", encoding="utf-8") as file:
+            campaigns_data = json.load(file)
+
+        for campaign in campaigns_data["data"]:
+            campaign_id = campaign["id"]
+            file_name = f"{campaign_id}_{interval['since']}_to_{interval['until']}.json"
+
+            params = {
+                "fields": "spend,clicks,impressions,reach,ctr,cpc",
+                "time_range": json.dumps({
+                    "since": interval["since"],
+                    "until": interval["until"]
+                }),
+                "time_increment": "monthly"
+            }
+
+            campaign_insights_output_dir = os.path.join(OUTPUT_PATH, "campaigns_insights")
+            os.makedirs(campaign_insights_output_dir, exist_ok=True)
+
+            client.fetch_data(
+                params=params,
+                output_dir=campaign_insights_output_dir,
+                endpoint=f"{campaign_id}/insights",
+                file_name=file_name,
+                page=False
+            )
+
+        # **Step 4.2: Fetch Ad Set Insights**
+        file_path = os.path.join(adsets_output_dir, "adsets_list.json")
+        with open(file_path, "r", encoding="utf-8") as file:
+            adsets_data = json.load(file)
+
+        for adset in adsets_data["data"]:
+            adset_id = adset["id"]
+            file_name = f"{adset_id}_{interval['since']}_to_{interval['until']}.json"
+
+            params = {
+                "fields": "spend,clicks,impressions,reach,ctr,cpc",
+                "time_range": json.dumps({
+                    "since": interval["since"],
+                    "until": interval["until"]
+                }),
+                "time_increment": "monthly"
+            }
+
+            adset_insights_output_dir = os.path.join(OUTPUT_PATH, "adsets_insights")
+            os.makedirs(adset_insights_output_dir, exist_ok=True)
+
+            client.fetch_data(
+                params=params,
+                output_dir=adset_insights_output_dir,
+                endpoint=f"{adset_id}/insights",
+                file_name=file_name,
+                page=False
+            )
+
+        # **Step 4.3: Fetch Ads Set Insights**
+        file_path = os.path.join(ads_output_dir, "ads_list.json")
+        with open(file_path, "r", encoding="utf-8") as file:
+            ads_data = json.load(file)
+
+        for ad in ads_data["data"]:
+            ad_id = ad["id"]
+            creative_id = ad.get("creative", {}).get("id")
+            file_name = f"{ad_id}_{interval['since']}_to_{interval['until']}.json"
+
+            # Fetch Ad Insights per month
+            params = {
+                "fields": "spend,clicks,impressions,reach,ctr,cpc",
+                "time_range": json.dumps({
+                    "since": interval["since"],
+                    "until": interval["until"]
+                }),
+                "time_increment": "monthly"
+            }
+
+            output_dir = os.path.join(OUTPUT_PATH, "ads_insights")
+            client.fetch_data(
+                params=params,
+                output_dir=output_dir,
+                endpoint=f"{ad_id}/insights",
+                file_name=file_name,
+                page=False
+            )
+
+            # # **Step 4.4: Fetch Creative Details
+            if creative_id:
                 params = {
-                    "metric": metric,
-                    'since': str(interval["since"]),
-                    'until': str(interval["until"]),
-                    "period": "day"
+                    "fields": "object_story_id,thumbnail_url,title,body,image_url"
                 }
 
-                # Define output directory and file name
-                output_dir = os.path.join(OUTPUT_PATH, f"insta_page_{metric}")
-                os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
+                output_dir = os.path.join(OUTPUT_PATH, "ads_creatives")
+                file_name = f"{creative_id}.json"
 
-                file_name = f"{interval['since']}_{interval['until']}.json"
-
-                # Fetch and save data
                 client.fetch_data(
                     params=params,
                     output_dir=output_dir,
-                    endpoint=f"{ig_account}/insights",
-                    file_name=file_name
-                    )
-            except Exception:
-                # Instagram profile Metrics
-                params = {
-                    "metric": metric,
-                    "metric_type":"total_value",
-                    'since': str(interval["since"]),
-                    'until': str(interval["until"]),
-                    "period": "day"
-                }
+                    endpoint=f"{creative_id}",
+                    file_name=file_name,
+                    page=False,
+                    extend_data = False
+                )
 
-                # Define output directory and file name
-                output_dir = os.path.join(OUTPUT_PATH, f"insta_page_{metric}")
-                os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
 
-                file_name = f"{interval['since']}_{interval['until']}.json"
-
-                # Fetch and save data
-                client.fetch_data(
-                    params=params,
-                    output_dir=output_dir,
-                    endpoint=f"{ig_account}/insights",
-                    file_name=file_name
-                    )
-    """
     print("ETL process completed successfully.")
