@@ -316,7 +316,7 @@ def etl():
             # # **Step 4.4: Fetch Creative Details
             if creative_id:
                 params = {
-                    "fields": "object_story_id,thumbnail_url,title,body,image_url"
+                    "fields": "object_story_id,thumbnail_url,title,body,image_url,object_url,instagram_actor_id"
                 }
 
                 output_dir = os.path.join(OUTPUT_PATH, "ads_creatives")
