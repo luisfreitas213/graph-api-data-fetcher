@@ -1,335 +1,277 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
-from config.config import ADS_ACCOUNT, INSTA_PAGE_METRICS, INSTA_POST_METRICS, INSTA_REEL_METRICS, OUTPUT_PATH, PAGE_ENDPOINT_BASE, PAGE_METRICS, PAGE_METRICS_ENDPOINT_BASE, POST_ENDPOINT_BASE, POST_METRICS
+import logging
+from pathlib import Path
+from typing import Dict, List, Optional
+from config.config import (
+    ADS_ACCOUNT, INSTA_PAGE_METRICS, INSTA_POST_METRICS, INSTA_REEL_METRICS, OUTPUT_PATH, 
+    PAGE_ENDPOINT_BASE, PAGE_METRICS, PAGE_METRICS_ENDPOINT_BASE, POST_ENDPOINT_BASE, POST_METRICS
+)
 from extract.api_client import GraphAPIClient
-from utils.utils import  get_last_months_intervals
+from utils.utils import get_last_months_intervals
 
-def etl():
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+
+def ensure_directory(path: str) -> Path:
+    """Ensure a directory exists and return the path.
+
+    Args:
+        path (str): Directory path.
+
+    Returns:
+        Path: Ensured directory path.
     """
-    Extract, transform, and load data from the Graph API for given page metrics.
-    Fetches daily aggregated data for each metric over a specified time interval.
+    path_obj = Path(path)
+    path_obj.mkdir(parents=True, exist_ok=True)
+    return path_obj
+
+
+def fetch_and_save(client: GraphAPIClient,
+                    params: Dict[str, str],
+                      endpoint: str,
+                        output_dir: str,
+                          file_name: str,
+                            extend_data: bool = True,
+                              page: bool = True) -> None:
+    """Helper function to fetch data and save it to a file.
+
+    Args:
+        client (GraphAPIClient): The API client instance.
+        params (Dict[str, str]): Request parameters.
+        endpoint (str): API endpoint.
+        output_dir (str): Output directory path.
+        file_name (str): Name of the output file.
+        extend_data (bool, optional): Whether to extend data in pagination. Defaults to True.
+        page (bool, optional): Whether pagination is needed. Defaults to True.
     """
+    output_path = ensure_directory(output_dir) / file_name
+    client.fetch_data(
+        params=params,
+        output_dir=str(output_path.parent),
+        endpoint=endpoint,
+        file_name=file_name,
+        extend_data=extend_data,
+        page=page
+    )
 
-    # Initialize API client
-    client = GraphAPIClient()
 
-    # Get date intervals for data extraction
+def load_json_file(file_path: str) -> Optional[Dict]:
+    """Load a JSON file and return its contents.
+
+    Args:
+        file_path (str): Path to the JSON file.
+
+    Returns:
+        Optional[Dict]: Parsed JSON data or None if error occurs.
+    """
     try:
-        num_months = int(os.getenv("NUM_MONTHS_DATA", "1"))  # Default to 1 month if not set
-        intervals_date = get_last_months_intervals(num_months=num_months)
-    except ValueError as e:
-        raise ValueError("NUM_MONTHS_DATA must be an integer.") from e
-
-    # Validate necessary environment variables
-    page_id = os.getenv("PAGE_ID")
-    if not page_id:
-        raise EnvironmentError("PAGE_ID environment variable is not set.")
+        with open(file_path, "r", encoding="utf-8") as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logging.error(f"Error loading JSON file {file_path}: {e}")
+        return None
 
 
-    # Iterate over metrics and date intervals to fetch data
-    for interval in intervals_date:
+def fetch_page_metrics(client: GraphAPIClient, intervals: List[Dict[str, str]]) -> None:
+    """Fetch page-level metrics from the Facebook Graph API.
 
-
-        # PAGE METRICS
-        # Construct request parameters
-        params = {
-            'metric': PAGE_METRICS,
-            'since': str(interval["since"]),
-            'until': str(interval["until"]),
-            'period': 'day'  # Daily aggregation
-        }
-
-        # Define output directory and file name
-        output_dir = os.path.join(OUTPUT_PATH, "facebook_page_metrics")
-        os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
-
-        file_name = f"{interval['start_date']}_{interval['until']}.json"
-
-        # Fetch and save data
-        client.fetch_data(
-            params=params,
-            output_dir=output_dir,
+    Args:
+        client (GraphAPIClient): The API client instance.
+        intervals (List[Dict[str, str]]): List of date intervals.
+    """
+    for interval in intervals:
+        fetch_and_save(
+            client,
+            params={
+                'metric': PAGE_METRICS,
+                  'since': interval["since"],
+                    'until': interval["until"],
+                     'period': 'day'},
             endpoint=PAGE_METRICS_ENDPOINT_BASE,
-            file_name=file_name
+            output_dir=f"{OUTPUT_PATH}/facebook_page_metrics",
+            file_name=f"{interval['start_date']}_{interval['until']}.json"
+        )
+
+
+def fetch_posts(client: GraphAPIClient, intervals: List[Dict[str, str]]) -> None:
+    """Fetch posts from the Facebook page.
+
+    Args:
+        client (GraphAPIClient): The API client instance.
+        intervals (List[Dict[str, str]]): List of date intervals.
+    """
+    for interval in intervals:
+        fetch_and_save(
+            client,
+            params={"fields": "id,message,created_time,attachments{media_type,media,url}",
+                    'since': interval["since"], 'until': interval["until"]},
+            endpoint=POST_ENDPOINT_BASE,
+            output_dir=f"{OUTPUT_PATH}/facebook_posts",
+            file_name=f"{interval['start_date']}_{interval['until']}.json"
+        )
+
+
+def fetch_post_metrics(client: GraphAPIClient, intervals: List[Dict[str, str]]) -> None:
+    """Fetch post-level metrics.
+
+    Args:
+        client (GraphAPIClient): The API client instance.
+        intervals (List[Dict[str, str]]): List of date intervals.
+    """
+    for interval in intervals:
+        posts_data = load_json_file(
+            f"{OUTPUT_PATH}/facebook_posts/{interval['start_date']}_{interval['until']}.json")
+        if posts_data:
+            for post in posts_data.get("data", []):
+                fetch_and_save(
+                    client,
+                    params={"metric": POST_METRICS},
+                    endpoint=f"{post['id']}/insights",
+                    output_dir=f"{OUTPUT_PATH}/facebook_post_metrics",
+                    file_name=f"{post['id']}.json"
+                )
+
+
+def fetch_instagram_data(client: GraphAPIClient) -> None:
+    """Fetch Instagram business account, media, and metrics.
+
+    Args:
+        client (GraphAPIClient): The API client instance.
+    """
+    fetch_and_save(
+        client,
+        params={"fields": "instagram_business_account"},
+        endpoint=PAGE_ENDPOINT_BASE,
+        output_dir=f"{OUTPUT_PATH}/instagram_business_account",
+        file_name="instagram_business_account.json",
+        extend_data=False
+    )
+
+    ig_account_data = load_json_file(
+        f"{OUTPUT_PATH}/instagram_business_account/instagram_business_account.json")
+    if not ig_account_data:
+        return
+
+    ig_account_id = ig_account_data.get("data", {}).get("instagram_business_account", {}).get("id")
+
+    fetch_and_save(
+        client,
+        params={"fields": "id,caption,media_type,media_url,timestamp,permalink"},
+        endpoint=f"{ig_account_id}/media",
+        output_dir=f"{OUTPUT_PATH}/instagram_media",
+        file_name="instagram_media.json"
+    )
+
+
+def fetch_facebook_ads(client: GraphAPIClient) -> None:
+    """Fetch Facebook Ads campaign, ad sets, and ads.
+
+    Args:
+        client (GraphAPIClient): The API client instance.
+    """
+    ads_categories = {
+        "campaigns": "id,name,objective,status",
+        "adsets": "id,name,campaign_id,targeting,budget,status",
+        "ads": "id,name,creative{id},campaign_id,adset_id,status"
+    }
+
+    for category, fields in ads_categories.items():
+        fetch_and_save(
+            client,
+            params={"fields": fields, "limit": 100},
+            endpoint=f"act_{ADS_ACCOUNT}/{category}",
+            output_dir=f"{OUTPUT_PATH}/{category}",
+            file_name=f"{category}_list.json",
+            page=False
+        )
+
+
+def fetch_ads_insights_for_interval(client: GraphAPIClient, interval: Dict[str, str]) -> None:
+    """Fetch insights for campaigns, ad sets, and ads for a specific interval.
+
+    Args:
+        client (GraphAPIClient): The API client instance.
+        interval (Dict[str, str]): The date interval.
+    """
+    insights_fields = "spend,clicks,impressions,reach,ctr,cpc"
+
+    for category in ["campaigns", "adsets", "ads"]:
+        data = load_json_file(f"{OUTPUT_PATH}/{category}/{category}_list.json")
+        if not data:
+            continue
+
+        for item in data.get("data", []):
+            item_id = item["id"]
+            fetch_and_save(
+                client,
+                params={
+                    "fields": insights_fields,
+                    "time_range": json.dumps(
+                        {"since": interval["since"], "until": interval["until"]}),
+                    "time_increment": "monthly"
+                },
+                endpoint=f"{item_id}/insights",
+                output_dir=f"{OUTPUT_PATH}/{category}_insights",
+                file_name=f"{item_id}_{interval['since']}_to_{interval['until']}.json",
+                page=False
             )
-        # POSTS
-        # Construct request parameters
-        params = {
-            "fields": "id,message,created_time,attachments{media_type,media,url}",
-            'since': str(interval["since"]),
-            'until': str(interval["until"])
+
+
+def fetch_ads_insights_multithreaded(client: GraphAPIClient, intervals: List[Dict[str, str]]) -> None:
+    """Fetch Ads insights in parallel for each interval.
+
+    Args:
+        client (GraphAPIClient): The API client instance.
+        intervals (List[Dict[str, str]]): List of date intervals.
+    """
+    with ThreadPoolExecutor(max_workers=10) as executor:  # Adjust max_workers as needed
+        future_to_interval = {
+            executor.submit(fetch_ads_insights_for_interval, client, interval): interval
+            for interval in intervals
         }
 
-        # Define output directory and file name
-        output_dir = os.path.join(OUTPUT_PATH, "facebook_posts")
-        os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
-
-        file_name = f"{interval['start_date']}_{interval['until']}.json"
-
-        # Fetch and save data
-        client.fetch_data(
-            params=params,
-            output_dir=output_dir,
-            endpoint=POST_ENDPOINT_BASE,
-            file_name=file_name
-        )
-        #POST METRICS
-        file_path = os.path.join(output_dir, file_name)
-        # Read the file and loop through each post
-        with open(file_path, "r", encoding="utf-8") as file:
-            posts_data = json.load(file)
-            for post in posts_data["data"]:
-                post_id = str(post["id"])
-                # Construct request parameters
-                params = {
-                    "metric": POST_METRICS
-                }
-
-                # Define output directory and file name
-                output_dir = os.path.join(OUTPUT_PATH, "facebook_post_metrics")
-                os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
-
-                file_name = f"{post_id}.json"
-                # Fetch and save data
-                client.fetch_data(
-                    params=params,
-                    output_dir=output_dir,
-                    endpoint= f"{post_id}/insights",
-                    file_name=file_name
-                )
-
-    #Get Instagram Business Account
-    params = {
-    "fields": "instagram_business_account",
-    }
-    output_dir = os.path.join(OUTPUT_PATH, "instagram_business_account")
-    os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
-
-    file_name = "instagram_business_account.json"
-    client.fetch_data(
-        params=params,
-        output_dir=output_dir,
-        endpoint=PAGE_ENDPOINT_BASE,
-        file_name=file_name,
-        extend_data = False
-    )
-
-    file_path = os.path.join(output_dir, file_name)
-    # Read the file and loop through each post
-    with open(file_path, "r", encoding="utf-8") as file:
-        ig_account  = json.load(file)["data"]["instagram_business_account"]["id"]
-
-    #Get Instagram Media
-    params = {
-    "fields": "id,caption,media_type,media_url,timestamp,permalink"
-    }
-    file_name = "instagram_media.json"
-    output_dir = os.path.join(OUTPUT_PATH, "instagram_media")
-    os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
-
-    client.fetch_data(
-        params=params,
-        output_dir=output_dir,
-        endpoint=f"{ig_account}/media",
-        file_name=file_name
-    )
-
-    file_path = os.path.join(output_dir, file_name)
-    # Step 1: Read Media IDs from File
-    with open(file_path, "r", encoding="utf-8") as file:
-        media_ids = json.load(file)
-
-    # Step 2: Fetch Metrics for Each Media ID
-    for media_item in media_ids["data"]:
-        media_id = media_item["id"]
-        media_type = media_item["media_type"]
-        file_name = f"{media_id}.json"
-        if media_type == "VIDEO":
-            output_dir = os.path.join(OUTPUT_PATH, "insta_reels_metrics")
-            params = {
-                "metric": INSTA_REEL_METRICS
-            }
-            client.fetch_data(
-                params=params,
-                output_dir=output_dir,
-                endpoint=f"{media_id}/insights",
-                file_name=file_name
-            )
-        else:
-            output_dir = os.path.join(OUTPUT_PATH, "insta_posts_metrics")
-            params = {
-                "metric": INSTA_POST_METRICS
-            }
-            client.fetch_data(
-                params=params,
-                output_dir=output_dir,
-                endpoint=f"{media_id}/insights",
-                file_name=file_name
-            )
-
-    ### **4. FETCH ADS & METRICS**
-    # **Step 1: Fetch Campaigns**
-    params = {
-        "fields": "id,name,objective,status",
-        "limit": 100
-    }
-
-    campaigns_output_dir = os.path.join(OUTPUT_PATH, "campaigns")
-    os.makedirs(campaigns_output_dir, exist_ok=True)
-
-    file_name = "campaigns_list.json"
-    client.fetch_data(
-        params=params,
-        output_dir=campaigns_output_dir,
-        endpoint=f"act_{ADS_ACCOUNT}/campaigns",
-        file_name=file_name,
-        page=False
-    )
-
-    # **Step 2: Fetch Ad Sets**
-    params = {
-        "fields": "id,name,campaign_id,targeting,budget,status",
-        "limit": 100
-    }
-
-    adsets_output_dir = os.path.join(OUTPUT_PATH, "adsets")
-    os.makedirs(adsets_output_dir, exist_ok=True)
-
-    file_name = "adsets_list.json"
-    client.fetch_data(
-        params=params,
-        output_dir=adsets_output_dir,
-        endpoint=f"act_{ADS_ACCOUNT}/adsets",
-        file_name=file_name,
-        page=False
-    )
-
-    # **Step 3: Fetch Ads with Campaign & Ad Set**
-    params = {
-        "fields": "id,name,creative{id},campaign_id,adset_id,status",
-        "limit": 100
-    }
-
-    ads_output_dir = os.path.join(OUTPUT_PATH, "ads")
-    os.makedirs(ads_output_dir, exist_ok=True)
-
-    file_name = "ads_list.json"
-    client.fetch_data(
-        params=params,
-        output_dir=ads_output_dir,
-        endpoint=f"act_{ADS_ACCOUNT}/ads",
-        file_name=file_name,
-        page=False
-    )
-
-    # **Step 4: Fetch Insights for Campaigns & Ad Sets**
-    # Fetch insights per month
-    for interval in intervals_date:
-
-        # **Step 4.1: Fetch Campaign Insights**
-        file_path = os.path.join(campaigns_output_dir, "campaigns_list.json")
-        with open(file_path, "r", encoding="utf-8") as file:
-            campaigns_data = json.load(file)
-
-        for campaign in campaigns_data["data"]:
-            campaign_id = campaign["id"]
-            file_name = f"{campaign_id}_{interval['since']}_to_{interval['until']}.json"
-
-            params = {
-                "fields": "spend,clicks,impressions,reach,ctr,cpc",
-                "time_range": json.dumps({
-                    "since": interval["since"],
-                    "until": interval["until"]
-                }),
-                "time_increment": "monthly"
-            }
-
-            campaign_insights_output_dir = os.path.join(OUTPUT_PATH, "campaigns_insights")
-            os.makedirs(campaign_insights_output_dir, exist_ok=True)
-
-            client.fetch_data(
-                params=params,
-                output_dir=campaign_insights_output_dir,
-                endpoint=f"{campaign_id}/insights",
-                file_name=file_name,
-                page=False
-            )
-
-        # **Step 4.2: Fetch Ad Set Insights**
-        file_path = os.path.join(adsets_output_dir, "adsets_list.json")
-        with open(file_path, "r", encoding="utf-8") as file:
-            adsets_data = json.load(file)
-
-        for adset in adsets_data["data"]:
-            adset_id = adset["id"]
-            file_name = f"{adset_id}_{interval['since']}_to_{interval['until']}.json"
-
-            params = {
-                "fields": "spend,clicks,impressions,reach,ctr,cpc",
-                "time_range": json.dumps({
-                    "since": interval["since"],
-                    "until": interval["until"]
-                }),
-                "time_increment": "monthly"
-            }
-
-            adset_insights_output_dir = os.path.join(OUTPUT_PATH, "adsets_insights")
-            os.makedirs(adset_insights_output_dir, exist_ok=True)
-
-            client.fetch_data(
-                params=params,
-                output_dir=adset_insights_output_dir,
-                endpoint=f"{adset_id}/insights",
-                file_name=file_name,
-                page=False
-            )
-
-        # **Step 4.3: Fetch Ads Set Insights**
-        file_path = os.path.join(ads_output_dir, "ads_list.json")
-        with open(file_path, "r", encoding="utf-8") as file:
-            ads_data = json.load(file)
-
-        for ad in ads_data["data"]:
-            ad_id = ad["id"]
-            creative_id = ad.get("creative", {}).get("id")
-            file_name = f"{ad_id}_{interval['since']}_to_{interval['until']}.json"
-
-            # Fetch Ad Insights per month
-            params = {
-                "fields": "spend,clicks,impressions,reach,ctr,cpc",
-                "time_range": json.dumps({
-                    "since": interval["since"],
-                    "until": interval["until"]
-                }),
-                "time_increment": "monthly"
-            }
-
-            output_dir = os.path.join(OUTPUT_PATH, "ads_insights")
-            client.fetch_data(
-                params=params,
-                output_dir=output_dir,
-                endpoint=f"{ad_id}/insights",
-                file_name=file_name,
-                page=False
-            )
-
-            # # **Step 4.4: Fetch Creative Details
-            if creative_id:
-                params = {
-                    "fields": "object_story_id,thumbnail_url,title,body,image_url,object_url,instagram_actor_id"
-                }
-
-                output_dir = os.path.join(OUTPUT_PATH, "ads_creatives")
-                file_name = f"{creative_id}.json"
-
-                client.fetch_data(
-                    params=params,
-                    output_dir=output_dir,
-                    endpoint=f"{creative_id}",
-                    file_name=file_name,
-                    page=False,
-                    extend_data = False
-                )
+        for future in as_completed(future_to_interval):
+            interval = future_to_interval[future]
+            try:
+                future.result()  # Get the result to catch exceptions
+                logging.info(
+                    f"Successfully fetched ads insights for interval: {interval['since']} to {interval['until']}")
+            except Exception as e:
+                logging.error(
+                    f"Error fetching ads insights for interval {interval['since']} to {interval['until']}: {e}")
 
 
-    print("ETL process completed successfully.")
+def etl() -> None:
+    """Run the complete ETL process."""
+    logging.info("Starting ETL process...")
+
+    client = GraphAPIClient()
+    num_months = int(os.getenv("NUM_MONTHS_DATA", "1"))
+    intervals = get_last_months_intervals(num_months=num_months)
+
+    etl_mode = os.getenv("ETL_MODE", "").lower()  # Get ETL mode
+
+    if etl_mode == "social":
+        logging.info("Running Social Media ETL...")
+        fetch_page_metrics(client, intervals)
+        fetch_posts(client, intervals)
+        fetch_post_metrics(client, intervals)
+        fetch_instagram_data(client)
+
+    elif etl_mode == "ads":
+        logging.info("Running Ads ETL...")
+        fetch_facebook_ads(client)
+        fetch_ads_insights_multithreaded(client, intervals)  # Run Ads insights in parallel
+
+    else:
+        logging.error('Invalid ETL_MODE. Set ETL_MODE to either "social" or "ads".')
+        raise ValueError('Invalid ETL_MODE. Please set ETL_MODE to "social" or "ads".')
+
+    logging.info("ETL process completed successfully.")
+
+
+if __name__ == "__main__":
+    etl()
