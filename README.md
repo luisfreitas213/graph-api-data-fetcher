@@ -96,6 +96,12 @@ The script automatically detects the `ETL_MODE`:
 
 ---
 
+### **Configurable Storage Locations**
+The **output folder structure** for raw data storage is defined in `config/config.py`:
+```python
+OUTPUT_PATH = Path(f"/datalake/raw/graph/{PAGE_NAME}")
+```
+
 ## Data Extraction Process
 ### 🔹 **Facebook Page & Posts**
 - Fetch **Page Metrics** (likes, engagement, impressions, etc.)
@@ -130,6 +136,14 @@ graph-api-data-fetcher/
 ```
 
 ---
+
+## Importing Modules
+This project is **modular** so that different parts of the ETL pipeline can be used independently. To import a specific module in a new script, use:
+```python
+from extract.api_client import GraphAPIClient
+from auth.graph_api_auth import FacebookTokenManager
+```
+This allows for **extending the project** without modifying core logic.
 
 ## Error Handling & Logging
 - **If API errors occur**, the script logs them and continues execution.
@@ -167,4 +181,3 @@ docker run --env-file .env graph-api-data-fetcher
 ---
 
 **Maintainer:** Luís Freitas
-
