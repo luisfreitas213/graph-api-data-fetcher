@@ -31,7 +31,7 @@ class GraphAPIClient:
             Exception: If the API response status is not 200 after retries.
         """
         url = f"{URL_BASE}{endpoint}"
-        params["access_token"] = os.getenv("PAGE_ACCESS_TOKEN") if page else os.getenv("ADS_ACCESS_TOKEN")
+        params["access_token"] = os.getenv("ACCESS_TOKEN",'')
 
         if not params["access_token"]:
             raise EnvironmentError("Access token is not set.")
@@ -94,16 +94,21 @@ class GraphAPIClient:
     def __write_to_file(self, output_dir, file_name, data):
         """
         Save data to a JSON file in the specified output directory.
-
+        
         Args:
             output_dir (str): Directory where the file will be saved.
             file_name (str): Name of the output file.
             data (dict): Data to save.
         """
-        os.makedirs(output_dir, exist_ok=True)
+        # Check if "data" exists and is empty
+        if isinstance(data, dict) and "data" in data and not data["data"]:
+            print(f"⚠️ No data found. Skipping file creation for {file_name}")
+            return  # Exit the function without writing
+
+        os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
 
         file_path = os.path.join(output_dir, file_name)
         with open(file_path, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=4)
 
-        print(f"Data successfully saved to {file_path}")
+        print(f"✅ Data successfully saved to {file_path}")

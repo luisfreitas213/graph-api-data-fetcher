@@ -4,8 +4,9 @@ import os
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional
+from auth.graph_api_auth import FacebookTokenManager
 from config.config import (
-    ADS_ACCOUNT, INSTA_PAGE_METRICS, INSTA_POST_METRICS, INSTA_REEL_METRICS, OUTPUT_PATH, 
+    ADS_ACCOUNT, OUTPUT_PATH,
     PAGE_ENDPOINT_BASE, PAGE_METRICS, PAGE_METRICS_ENDPOINT_BASE, POST_ENDPOINT_BASE, POST_METRICS
 )
 from extract.api_client import GraphAPIClient
@@ -253,6 +254,9 @@ def etl() -> None:
     intervals = get_last_months_intervals(num_months=num_months)
 
     etl_mode = os.getenv("ETL_MODE", "").lower()  # Get ETL mode
+
+    token_manager = FacebookTokenManager(os.getenv("ACCESS_TOKEN", ""))
+    os.environ["ACCESS_TOKEN"] = token_manager.get_token()
 
     if etl_mode == "social":
         logging.info("Running Social Media ETL...")

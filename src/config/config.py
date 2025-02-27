@@ -54,3 +54,7 @@ OUTPUT_PATH = Path(f"/datalake/raw/graph/{PAGE_NAME}")
 
 # Ads Account
 ADS_ACCOUNT = f"{ADS_ACCOUNT}"
+
+# Security
+TOKEN_FILE = Path(f"/datalake/raw/graph/{PAGE_NAME}/security/secure_token.json")
+ENCRYPTION_KEY_FILE = Path(f"/datalake/raw/graph/{PAGE_NAME}/security/key.key")
