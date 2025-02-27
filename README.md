@@ -1,7 +1,7 @@
 # Graph API Data Fetcher
 
 ## Overview
-The **Graph API Data Fetcher** is a Python-based ETL tool designed to extract, transform, and load data from the **Facebook and Instagram Graph API**. It automates data fetching for:
+The **Graph API Data Fetcher** is a Python-based ETL tool designed to extract data from the **Facebook and Instagram Graph API (v22.0)**. It automates data fetching for:
 
 - **Facebook Page Insights & Posts**
 - **Instagram Business Insights & Reels**
@@ -89,6 +89,25 @@ OUTPUT_PATH = Path(f"/datalake/raw/graph/{PAGE_NAME}")
 ```
 
 ---
+## External Libraries in `requirements.txt`
+This project relies on the following external dependencies:
+
+| Package | Version | Description |
+|---------|---------|-------------|
+| **requests** | 2.32.3 | Handles HTTP requests to interact with the Facebook Graph API. |
+| **python-dateutil** | 2.9.0 | Provides powerful extensions to work with date/time handling. |
+| **cryptography** | 44.0.1 | Encrypts and securely stores tokens for authentication. |
+
+Ensure all dependencies are installed using:
+```sh
+pip install -r requirements.txt
+```
+To manually install a specific package, use:
+```sh
+pip install package_name
+```
+
+---
 
 ## Usage
 Run the ETL process with:
@@ -134,16 +153,6 @@ graph-api-data-fetcher/
 │── requirements.txt         # Python Dependencies
 │── README.md                # Documentation
 ```
-
----
-
-## Importing Modules
-This project is **modular** so that different parts of the ETL pipeline can be used independently. To import a specific module in a new script, use:
-```python
-from extract.api_client import GraphAPIClient
-from auth.graph_api_auth import FacebookTokenManager
-```
-This allows for **extending the project** without modifying core logic.
 
 ---
 
