@@ -82,6 +82,12 @@ set NUM_MONTHS_DATA=3
 set ETL_MODE="social"
 ```
 
+### **Configurable Storage Locations**
+The **output folder structure** for raw data storage is defined in `config/config.py`:
+```python
+OUTPUT_PATH = Path(f"/datalake/raw/graph/{PAGE_NAME}")
+```
+
 ---
 
 ## Usage
@@ -95,12 +101,6 @@ The script automatically detects the `ETL_MODE`:
 - `ads` → Fetches **Facebook Ads & Campaign Performance**
 
 ---
-
-### **Configurable Storage Locations**
-The **output folder structure** for raw data storage is defined in `config/config.py`:
-```python
-OUTPUT_PATH = Path(f"/datalake/raw/graph/{PAGE_NAME}")
-```
 
 ## Data Extraction Process
 ### 🔹 **Facebook Page & Posts**
@@ -144,6 +144,8 @@ from extract.api_client import GraphAPIClient
 from auth.graph_api_auth import FacebookTokenManager
 ```
 This allows for **extending the project** without modifying core logic.
+
+---
 
 ## Error Handling & Logging
 - **If API errors occur**, the script logs them and continues execution.
